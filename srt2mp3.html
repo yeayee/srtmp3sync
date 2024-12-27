@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SRT and MP3 Sync</title>
+    <link rel="stylesheet" href="https://intumu.com//static/adminlte/bower_components/bootstrap/dist/css/bootstrap.min.css">
+    <!-- Ionicons -->
+    <link rel="stylesheet"
+          href="https://intumu.com//static/adminlte/bower_components/Ionicons/css/ionicons.min.css">
+    <!-- Theme style -->
+    <link rel="stylesheet" href="https://intumu.com//static/adminlte/dist/css/AdminLTE.min.css">
+    <link rel="stylesheet" href="https://intumu.com//static/adminlte/dist/css/skins/skin-blue.min.css">
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+	<script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+	<script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+	<![endif]-->
+    <!-- Google Font 可以正常访问-->
+    <!--  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic"> -->
+    <style>
+        .highlight {
+            background-color: yellow;
+        }
+        .fixed-bottom {
+            position: fixed;
+            bottom: 0;
+			left: 0;
+            width: 100%;
+            background-color: white;
+            z-index: 1000;
+        }
+        #subtitleDisplay { height: 70vh; /* 高度设为屏幕高度的 70% */ overflow-y: auto; background-size: cover; background-repeat: no-repeat; }
+    </style>
+</head>
+<body>
+	<section class="content-header">
+		<!--  style="margin-bottom: 5px;" -->
+		<h1>
+			<a href="/" target="_blank">Intumu</a>
+			<!-- <small>By Civilpy</small> -->
+		  </h1>
+		<ol class="breadcrumb">
+			<li><a href="https://github.com/yeayee" target="_blank"> Contact Me  </a></li>
+		</ol>
+	</section>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group"> <label for="srtInput">UPLoad SRT file</label> <input type="file" id="srtInput"
+                        class="form-control-file"> </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group"> <label for="mp3Input">UPLoad MP3 file</label> <input type="file" id="mp3Input"
+                        class="form-control-file"> </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group"> <label for="backgroundInput">UPLoad BackgroundImage</label> <input type="file" id="backgroundInput"
+                        class="form-control-file"> </div>
+            </div>
+        </div>
+        <div id="subtitleDisplay" class="mt-4"></div>
+    </div>
+    <audio id="audio" controls class="mt-4 fixed-bottom"></audio>
+
+    <script >
+        document.addEventListener("DOMContentLoaded", function() {
+            const srtInput = document.getElementById('srtInput');
+            const mp3Input = document.getElementById('mp3Input');
+            const backgroundInput = document.getElementById('backgroundInput');
+            const audio = document.getElementById('audio');
+            const subtitleDisplay = document.getElementById('subtitleDisplay');
+        
+            let subtitles = [];
+            let lastHighlightedIndex = -1; 
+        
+            srtInput.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file && file.name.endsWith('.srt')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const srtText = e.target.result;
+                        subtitles = parseSRT(srtText);
+                        displaySubtitles(subtitles);
+                    };
+                    reader.readAsText(file);
+                }
+            });
+        
+            mp3Input.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file && file.type.startsWith('audio/')) {
+                    audio.src = URL.createObjectURL(file);
+                }
+            });
+        
+            backgroundInput.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        subtitleDisplay.style.backgroundImage = `url(${e.target.result})`;
+                        subtitleDisplay.style.backgroundSize = 'cover';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        
+            audio.addEventListener('timeupdate', function() {
+                const currentTime = audio.currentTime * 1000; 
+                highlightSubtitle(currentTime, subtitles);
+            });
+        
+            function parseSRT(srtText) {
+                const lines = srtText.split('\n');
+                const result = [];
+                let subtitle = {};
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].trim() === '') {
+                        result.push(subtitle);
+                        subtitle = {};
+                    } else if (!isNaN(lines[i])) {
+                        subtitle.index = lines[i].trim();
+                    } else if (lines[i].includes('-->')) {
+                        const times = lines[i].split(' --> ');
+                        subtitle.start = parseTime(times[0]);
+                        subtitle.end = parseTime(times[1]);
+                    } else {
+                        subtitle.text = subtitle.text ? subtitle.text + '\n' + lines[i].trim() : lines[i].trim();
+                    }
+                }
+                return result;
+            }
+        
+            function parseTime(timeStr) {
+                const parts = timeStr.split(':');
+                const secondsParts = parts[2].split(',');
+                return (parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(secondsParts[0])) * 1000 + parseInt(secondsParts[1]);
+            }
+        
+            function displaySubtitles(subtitles) {
+                subtitleDisplay.innerHTML = '';
+                subtitles.forEach((sub, index) => {
+                    const div = document.createElement('div');
+                    div.id = `subtitle-${index}`;
+                    div.innerText = sub.text;
+                    subtitleDisplay.appendChild(div);
+                });
+            }
+        
+            function highlightSubtitle(currentTime, subtitles) {
+                let highlightedIndex = -1;
+        
+                subtitles.forEach((sub, index) => {
+                    const div = document.getElementById(`subtitle-${index}`);
+                    if (currentTime >= sub.start && currentTime <= sub.end) {
+                        div.classList.add('highlight');
+                        highlightedIndex = index;
+                    } else {
+                        div.classList.remove('highlight');
+                    }
+                });
+        
+
+                if (highlightedIndex !== -1 && highlightedIndex !== lastHighlightedIndex) {
+                    const div = document.getElementById(`subtitle-${highlightedIndex}`);
+                    div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    lastHighlightedIndex = highlightedIndex;
+                }
+            }
+        });
+        
+	</script>
+</body>
+</html>
